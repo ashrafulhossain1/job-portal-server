@@ -7,13 +7,36 @@ const app = express()
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
-// app.use(cors({
-//     origin: ['http://localhost:5173'],
-//     credentials: true
-// }));
-// app.use(cookieParser());
-app.use(cors());
+
+app.use(cors({
+    origin: ['http://localhost:5173'],
+    credentials: true
+}));
 app.use(express.json());
+app.use(cookieParser())
+
+
+const logger = (req, res, next) => {
+    console.log('inside logger')
+    next()
+
+}
+
+const verifyToken = (req, res, next) => {
+    // console.log('inside verify token middleware', req.cookies)
+    const token = req?.cookies?.token;
+
+    if (!token) {
+        return res.status(401).send({ message: 'Unauthorized Access' })
+    }
+
+    jwt.verify(token, process.env.JWT_ACCESS_SECRET, (err, decoded) => {
+        if (err) {
+            return res.status(401).send({ message: 'Unauthorized Access' })
+        }
+        next()
+    })
+}
 
 
 
@@ -54,16 +77,21 @@ async function run() {
             //     })
             //     .send({ success: true })
 
-
-
-
+            const user = req.body;
+            const token = jwt.sign(user, process.env.JWT_ACCESS_SECRET, { expiresIn: '1h' })
+            res.cookie('token', token, {
+                httpOnly: true,
+                secure: false,
+            })
+                .send({ success: true })
         })
 
 
         // jobs related APIs / 
         // 1. all jobs for "home page"
         // 2. my jobs from "my posted Jobs page" admin  of job holder
-        app.get('/jobs', async (req, res) => {
+        app.get('/jobs', logger, async (req, res) => {
+            console.log('now inside the get jobs api')
             const email = req.query.email;
             let query = {}
             if (email) {
@@ -95,14 +123,11 @@ async function run() {
         // job application Apis
         // get all data, get one data some data [0,1,,many]
 
-        // my application ==>>> by email 
+        // my applications ==>>> by email 
         // with take job details by aggregate 82 no line
-        app.get('/job-applications', async (req, res) => {
+        app.get('/job-applications', verifyToken, async (req, res) => {
             const email = req.query.email;
             const query = { applicantEmail: email }
-
-            // console.log(' cuk cuk cookies', req.cookies)
-
 
             const result = await jobApplicationCollection.find(query).toArray()
 
