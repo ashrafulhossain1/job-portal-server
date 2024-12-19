@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
 require('dotenv').config()
 const app = express()
 const port = process.env.PORT || 5000;
@@ -31,15 +32,32 @@ async function run() {
 
         // jobs related APIs
         const jobsCollection = client.db('jobsPoral').collection('jobs')
-        const jobApplication = client.db('jobsPoral').collection('job-applications')
+        const jobApplicationCollection = client.db('jobsPoral').collection('job-applications')
+
+        // auth related API
+        app.post('/jwt', async (req, res) => {
+            const user = req.body;
+            const token = jwt.sign(user, 'secret', { expiresIn: '1h' })
+            res.send(token)
+        })
 
 
+        // jobs related APIs / 
+        // 1. all jobs for "home page"
+        // 2. my jobs from "my posted Jobs page" admin  of job holder
         app.get('/jobs', async (req, res) => {
-            const cursor = jobsCollection.find();
+            const email = req.query.email;
+            let query = {}
+            if (email) {
+                query = { hr_email: email }
+            }
+            const cursor = jobsCollection.find(query);
             const result = await cursor.toArray()
             res.send(result)
         })
 
+
+        // for details page one job details and apply button 
         app.get('/jobs/:id', async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
@@ -47,13 +65,25 @@ async function run() {
             res.send(result)
         })
 
+
+
+        // new job post from client with her email
+        app.post('/jobs', async (req, res) => {
+            const newJobs = req.body;
+            const result = await jobsCollection.insertOne(newJobs)
+            res.send(result);
+        })
+
         // job application Apis
         // get all data, get one data some data [0,1,,many]
 
+        // my application ==>>> by email 
+        // with take job details by aggregate 82 no line
         app.get('/job-applications', async (req, res) => {
             const email = req.query.email;
+
             const query = { applicantEmail: email }
-            const result = await jobApplication.find(query).toArray()
+            const result = await jobApplicationCollection.find(query).toArray()
 
             // Fokira way to aggregate data
 
@@ -70,10 +100,62 @@ async function run() {
             res.send(result);
         })
 
+        // app.get('/job-applications/:id')==> get a specific job applications by id 
+
+        // // 2. my jobs from "my posted Jobs page" admin  of job holder
+        // 3. my posted jobs page page to all applied applicants list 
+        // find by job_id 
+        app.get('/job-applications/jobs/:job_id', async (req, res) => {
+            const jobId = req.params.job_id;
+            const query = { job_id: jobId }
+            const result = await jobApplicationCollection.find(query).toArray()
+            res.send(result)
+        })
+
+        // any new application add in DB and with increment count
         app.post('/job-applications', async (req, res) => {
             const application = req.body;
-            const result = await jobApplication.insertOne(application)
+            const result = await jobApplicationCollection.insertOne(application)
+
+            // how many person were apply in this job
+            // skip--> it
+            const id = application.job_id
+            const query = { _id: new ObjectId(id) }
+            const job = await jobsCollection.findOne(query)
+            console.log(job)
+
+            let newCount = 0;
+            if (job.applicationCount) {
+                newCount = job.applicationCount + 1;
+            }
+            else {
+                newCount = 1
+            }
+            // update job info ==> count
+            const filter = { _id: new ObjectId(id) };
+            const updatedDoc = {
+                $set: {
+                    applicationCount: newCount
+                }
+            }
+            const updatedResult = await jobsCollection.updateOne(filter, updatedDoc)
+
+
             res.send(result);
+        })
+
+
+        app.patch('/job-applications/:id', async (req, res) => {
+            const id = req.params.id;
+            const data = req.body;
+            const filter = { _id: new ObjectId(id) }
+            const updatedDoc = {
+                $set: {
+                    status: data.status
+                }
+            }
+            const result = await jobApplicationCollection.updateOne(filter, updatedDoc)
+            res.send(result)
         })
 
 
