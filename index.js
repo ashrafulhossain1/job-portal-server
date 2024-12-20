@@ -22,20 +22,40 @@ const logger = (req, res, next) => {
 
 }
 
+
+// // // //  //  first add
+// const verifyToken = (req, res, next) => {
+//     // console.log('inside verify token middleware', req.cookies)
+//     const token = req?.cookies?.token;
+
+//     if (!token) {
+//         return res.status(401).send({ message: 'Unauthorized Access' })
+//     }
+
+//     jwt.verify(token, process.env.JWT_ACCESS_SECRET, (err, decoded) => {
+//         if (err) {
+//             return res.status(401).send({ message: 'Unauthorized Access' })
+//         }
+//         next()
+//     })
+// }
+
+// again recap --> 
+
+
 const verifyToken = (req, res, next) => {
-    // console.log('inside verify token middleware', req.cookies)
-    const token = req?.cookies?.token;
-
+    const token = req?.cookies?.token
     if (!token) {
-        return res.status(401).send({ message: 'Unauthorized Access' })
+        return res.status(401).send({ message: 'unAuthorized access' })
     }
-
     jwt.verify(token, process.env.JWT_ACCESS_SECRET, (err, decoded) => {
         if (err) {
-            return res.status(401).send({ message: 'Unauthorized Access' })
+            return res.status(401).send({ message: 'unAuthorized access' })
         }
+        req.user = decoded;
         next()
     })
+
 }
 
 
@@ -78,7 +98,7 @@ async function run() {
             //     .send({ success: true })
 
             const user = req.body;
-            const token = jwt.sign(user, process.env.JWT_ACCESS_SECRET, { expiresIn: '1h' })
+            const token = jwt.sign(user, process.env.JWT_ACCESS_SECRET, { expiresIn: '5h' })
             res.cookie('token', token, {
                 httpOnly: true,
                 secure: false,
@@ -128,6 +148,10 @@ async function run() {
         app.get('/job-applications', verifyToken, async (req, res) => {
             const email = req.query.email;
             const query = { applicantEmail: email }
+
+            if (req.user.email !== req.query.email) {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
 
             const result = await jobApplicationCollection.find(query).toArray()
 
